@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
@@ -22,7 +23,6 @@ func Token(w http.ResponseWriter, r *http.Request) {
 	setHeaders(w)
 	var response Response
 	apikey := r.Header.Get(APIKEY_HEADER)
-	fmt.Println("1 : " + apikey)
 
 	if len(apikey) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -30,21 +30,16 @@ func Token(w http.ResponseWriter, r *http.Request) {
 		errorHandler(json.NewEncoder(w).Encode(response), "APIKEY")
 		return
 	}
-	for k := range APIKEYS {
-		fmt.Printf("key[%s] value[%s]\n", k, APIKEYS[k])
-	}
 
 	if val, exists := APIKEYS["apikey:"+apikey]; exists {
 
 		secret := []byte(AUTH_SECRET)
 
-		fmt.Println("2 : " + val.Name + " " + val.Roles)
-
 		issuer := jwt.New(jwt.SigningMethodHS256)
 		issuer.Claims = jwt.MapClaims{
 			"sub":   val.Name,
 			"exp":   time.Now().Add(time.Hour * 72).Unix(),
-			"roles": val.Roles,
+			"roles": strings.Split(val.Roles, ","),
 		}
 
 		token, err := issuer.SignedString(secret)
@@ -87,7 +82,6 @@ func Cache(w http.ResponseWriter, r *http.Request) {
 		err := redis.ScanStruct(v, &a)
 		errorHandler(err, "Redis ScanStruct")
 		APIKEYS[key] = a
-		fmt.Printf("%+v\n", APIKEYS[key])
 	}
 
 	setHeaders(w)
