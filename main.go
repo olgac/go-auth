@@ -10,13 +10,18 @@ import (
 )
 
 var (
-	APP_PORT   = os.Getenv("APP_PORT")
-	REDIS_HOST = os.Getenv("REDIS_HOST")
-	REDIS_PORT = os.Getenv("REDIS_PORT")
-	APIKEYS    map[string]ApiKey
+	AUTH_SECRET   = os.Getenv("AUTH_SECRET")
+	APP_PORT      = os.Getenv("APP_PORT")
+	REDIS_HOST    = os.Getenv("REDIS_HOST")
+	REDIS_PORT    = os.Getenv("REDIS_PORT")
+	APIKEYS       = make(map[string]ApiKey)
+	APIKEY_HEADER = "apikey"
 )
 
 func init() {
+	if AUTH_SECRET == "" {
+		AUTH_SECRET = "AhmetVehbiOlgac"
+	}
 	if APP_PORT == "" {
 		APP_PORT = "8080"
 	}

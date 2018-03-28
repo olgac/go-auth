@@ -14,9 +14,8 @@ type Route struct {
 }
 
 type ApiKey struct {
-	Name   string
-	Secret string
-	Claims string
+	Name  string
+	Roles string
 }
 
 type Status struct {
