@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -36,7 +37,7 @@ func init() {
 func main() {
 	router := mux.NewRouter().StrictSlash(true)
 	for _, route := range routes {
-		router.Methods(route.Method).Path(route.Pattern).Handler(withLogger(route.HandlerFunc))
+		router.Methods(route.Method).Path(route.Pattern).Handler(route.HandlerFunc)
 	}
 	s := &http.Server{
 		Handler:      router,
@@ -44,18 +45,21 @@ func main() {
 		WriteTimeout: 5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 	}
-	errorHandler(s.ListenAndServe(), "Server")
+	log.Panic(s.ListenAndServe())
 }
 
-func withLogger(inner http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer log.Printf("%s - %s", "INFO", r.Method+" "+r.RequestURI)
-		inner.ServeHTTP(w, r)
-	})
+func responseError(w http.ResponseWriter, err error) {
+	defer log.Printf("%s - %v", "ERROR", err)
+	response(w, http.StatusInternalServerError, Response{Code: http.StatusInternalServerError, Text: err.Error()})
 }
 
-func errorHandler(err error, str string) {
-	if err != nil {
-		log.Fatalf("%s - %v - %q", "ERROR", err, str)
-	}
+func responseOK(w http.ResponseWriter, v interface{}) {
+	response(w, http.StatusOK, v)
+}
+
+func response(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
 }

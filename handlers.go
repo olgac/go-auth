@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,25 +10,18 @@ import (
 )
 
 func Health(w http.ResponseWriter, r *http.Request) {
-	setHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	var response = Status{Status: "UP"}
-	errorHandler(json.NewEncoder(w).Encode(response), "Health")
+	responseOK(w, Status{Status: "UP"})
 }
 
 func Token(w http.ResponseWriter, r *http.Request) {
-	setHeaders(w)
-	var response Response
 	apikey := r.Header.Get(APIKEY_HEADER)
 
 	if len(apikey) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		response = Response{Code: http.StatusBadRequest, Text: "APIKEY header is required!"}
-		errorHandler(json.NewEncoder(w).Encode(response), "APIKEY")
+		response(w, http.StatusBadRequest, Response{Code: http.StatusBadRequest, Text: "APIKEY header is required!"})
 		return
 	}
 
-	if val, exists := APIKEYS["apikey:"+apikey]; exists {
+	if val, ok := APIKEYS["apikey:"+apikey]; ok {
 
 		secret := []byte(AUTH_SECRET)
 
@@ -44,53 +34,48 @@ func Token(w http.ResponseWriter, r *http.Request) {
 
 		token, err := issuer.SignedString(secret)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Fatalf("%s - %v - %q", "ERROR", err, "Token SignedString")
-			response = Response{Code: http.StatusInternalServerError, Text: "APIKEY signing error!"}
-			errorHandler(json.NewEncoder(w).Encode(response), "Token SignedString")
+			responseError(w, err)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		errorHandler(json.NewEncoder(w).Encode(JWT{Token: token}), "Token SignedString")
+		responseOK(w, JWT{Token: token})
 	} else {
-
-		fmt.Println("2 : " + val.Name)
-		w.WriteHeader(http.StatusUnauthorized)
-		response = Response{Code: http.StatusUnauthorized, Text: "APIKEY is unauthorized!"}
-		errorHandler(json.NewEncoder(w).Encode(response), "APIKEY")
+		response(w, http.StatusUnauthorized, Response{Code: http.StatusUnauthorized, Text: "APIKEY is unauthorized!"})
 	}
 }
 
 func Cache(w http.ResponseWriter, r *http.Request) {
 	c, err := redis.Dial("tcp", REDIS_HOST+":"+REDIS_PORT)
+	if err != nil {
+		responseError(w, err)
+		return
+	}
 	defer c.Close()
-	errorHandler(err, "Redis Dial")
 
 	keys, err := redis.Strings(c.Do("KEYS", "apikey:*"))
-	errorHandler(err, "Redis KEYS")
+	if err != nil {
+		responseError(w, err)
+		return
+	}
 
 	APIKEYS = make(map[string]ApiKey)
 
 	var a ApiKey
 
 	for _, key := range keys {
-		//fmt.Println(key)
-		v, err2 := redis.Values(c.Do("HGETALL", key))
-		errorHandler(err2, "Redis HGETALL")
+		v, err := redis.Values(c.Do("HGETALL", key))
+		if err != nil {
+			responseError(w, err)
+			return
+		}
 
-		err := redis.ScanStruct(v, &a)
-		errorHandler(err, "Redis ScanStruct")
+		err2 := redis.ScanStruct(v, &a)
+		if err2 != nil {
+			responseError(w, err)
+			return
+		}
 		APIKEYS[key] = a
 	}
 
-	setHeaders(w)
-	w.WriteHeader(http.StatusOK)
-	var response = Response{Code: http.StatusOK, Text: "OK"}
-	errorHandler(json.NewEncoder(w).Encode(response), "APIKey")
-}
-
-func setHeaders(w http.ResponseWriter) http.ResponseWriter {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	return w
+	responseOK(w, Response{Code: http.StatusOK, Text: "OK"})
 }
