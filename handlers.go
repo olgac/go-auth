@@ -10,21 +10,14 @@ import (
 )
 
 func Health(w http.ResponseWriter, r *http.Request) {
-	responseOK(w, Status{Status: "UP"})
+	response(w, http.StatusOK, "UP")
 }
 
 func Token(w http.ResponseWriter, r *http.Request) {
-	apikey := r.Header.Get(APIKEY_HEADER)
-
-	if len(apikey) == 0 {
-		response(w, http.StatusBadRequest, Response{Code: http.StatusBadRequest, Text: "APIKEY header is required!"})
-		return
-	}
-
-	if val, ok := APIKEYS["apikey:"+apikey]; ok {
-
+	if apikey := r.Header.Get(APIKEY_HEADER); len(apikey) == 0 {
+		response(w, http.StatusBadRequest, "APIKEY header is required!")
+	} else if val, ok := APIKEYS["apikey:"+apikey]; ok {
 		secret := []byte(AUTH_SECRET)
-
 		issuer := jwt.New(jwt.SigningMethodHS256)
 		issuer.Claims = jwt.MapClaims{
 			"sub":   val.Name,
@@ -32,50 +25,38 @@ func Token(w http.ResponseWriter, r *http.Request) {
 			"roles": strings.Split(val.Roles, ","),
 		}
 
-		token, err := issuer.SignedString(secret)
-		if err != nil {
-			responseError(w, err)
-			return
+		if token, err := issuer.SignedString(secret); err != nil {
+			response(w, http.StatusInternalServerError, err.Error())
+		} else {
+			responseObject(w, http.StatusOK, JWT{Token: token})
 		}
-
-		responseOK(w, JWT{Token: token})
 	} else {
-		response(w, http.StatusUnauthorized, Response{Code: http.StatusUnauthorized, Text: "APIKEY is unauthorized!"})
+		response(w, http.StatusUnauthorized, "APIKEY is unauthorized!")
 	}
 }
 
 func Cache(w http.ResponseWriter, r *http.Request) {
-	c, err := redis.Dial("tcp", REDIS_HOST+":"+REDIS_PORT)
-	if err != nil {
-		responseError(w, err)
-		return
-	}
-	defer c.Close()
-
-	keys, err := redis.Strings(c.Do("KEYS", "apikey:*"))
-	if err != nil {
-		responseError(w, err)
-		return
-	}
-
-	APIKEYS = make(map[string]ApiKey)
-
-	var a ApiKey
-
-	for _, key := range keys {
-		v, err := redis.Values(c.Do("HGETALL", key))
-		if err != nil {
-			responseError(w, err)
-			return
+	if c, err := redis.Dial("tcp", REDIS_HOST+":"+REDIS_PORT); err != nil {
+		response(w, http.StatusInternalServerError, err.Error())
+	} else {
+		defer c.Close()
+		if keys, err := redis.Strings(c.Do("KEYS", "apikey:*")); err != nil {
+			response(w, http.StatusInternalServerError, err.Error())
+		} else {
+			APIKEYS = make(map[string]ApiKey)
+			var a ApiKey
+			for _, key := range keys {
+				if v, err := redis.Values(c.Do("HGETALL", key)); err != nil {
+					response(w, http.StatusInternalServerError, "key : "+key+" "+err.Error())
+					return
+				} else if err := redis.ScanStruct(v, &a); err != nil {
+					response(w, http.StatusInternalServerError, err.Error())
+					return
+				} else {
+					APIKEYS[key] = a
+				}
+			}
+			response(w, http.StatusOK, "OK")
 		}
-
-		err2 := redis.ScanStruct(v, &a)
-		if err2 != nil {
-			responseError(w, err)
-			return
-		}
-		APIKEYS[key] = a
 	}
-
-	responseOK(w, Response{Code: http.StatusOK, Text: "OK"})
 }

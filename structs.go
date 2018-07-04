@@ -18,30 +18,16 @@ type ApiKey struct {
 	Roles string
 }
 
-type Status struct {
-	Status string `json:"status"`
-}
-
 type JWT struct {
 	Token string `json:"token"`
 }
 
-type Routes []Route
+type Level int
 
-var routes = Routes{
-	Route{
-		"GET",
-		"/health",
-		Health,
-	},
-	Route{
-		"GET",
-		"/token",
-		Token,
-	},
-	Route{
-		"GET",
-		"/cache",
-		Cache,
-	},
-}
+const (
+	DEBUG Level = 1 + iota
+	INFO
+	WARN
+	ERROR
+	FATAL
+)

@@ -5,12 +5,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gorilla/mux"
 )
 
 var (
+	LOG_LEVEL     = os.Getenv("LOG_LEVEL")
 	AUTH_SECRET   = os.Getenv("AUTH_SECRET")
 	APP_PORT      = os.Getenv("APP_PORT")
 	REDIS_HOST    = os.Getenv("REDIS_HOST")
@@ -20,6 +20,9 @@ var (
 )
 
 func init() {
+	if LOG_LEVEL == "" {
+		LOG_LEVEL = "warn"
+	}
 	if AUTH_SECRET == "" {
 		AUTH_SECRET = "AhmetVehbiOlgac"
 	}
@@ -39,27 +42,18 @@ func main() {
 	for _, route := range routes {
 		router.Methods(route.Method).Path(route.Pattern).Handler(route.HandlerFunc)
 	}
-	s := &http.Server{
-		Handler:      router,
-		Addr:         ":" + APP_PORT,
-		WriteTimeout: 5 * time.Second,
-		ReadTimeout:  5 * time.Second,
+	if err := http.ListenAndServe(":"+APP_PORT, router); err != nil {
+		log.Fatalln(err)
 	}
-	log.Panic(s.ListenAndServe())
 }
 
-func responseError(w http.ResponseWriter, err error) {
-	defer log.Printf("%s - %v", "ERROR", err)
-	response(w, http.StatusInternalServerError, Response{Code: http.StatusInternalServerError, Text: err.Error()})
+func response(w http.ResponseWriter, code int, text string) {
+	responseObject(w, code, Response{Code: code, Text: text})
 }
 
-func responseOK(w http.ResponseWriter, v interface{}) {
-	response(w, http.StatusOK, v)
-}
-
-func response(w http.ResponseWriter, status int, v interface{}) {
+func responseObject(w http.ResponseWriter, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
+	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(v)
 }
